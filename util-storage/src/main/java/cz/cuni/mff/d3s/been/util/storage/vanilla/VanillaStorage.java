@@ -12,7 +12,8 @@ import java.nio.file.StandardOpenOption;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.apache.commons.io.FileUtils;
+import org.apache.commons.exec.CommandLine;
+import org.apache.commons.exec.DefaultExecutor;
 
 import cz.cuni.mff.d3s.been.util.storage.Storage;
 import cz.cuni.mff.d3s.been.util.storage.StorageException;
@@ -74,6 +75,27 @@ public class VanillaStorage implements Storage {
 		return getInternalPath(address, directory);
 	}
 
+	private void copyPathToPath(Path source, Path destination) throws StorageException {
+
+		// We do not use Commons IO because it does not preserve attributes.
+
+		DefaultExecutor executor = new DefaultExecutor ();
+		
+		CommandLine command = new CommandLine ("cp")
+			.addArgument("-a", false)
+			.addArgument(source.toString(), false)
+			.addArgument(destination.toString(), false);
+
+		try {
+			int result = executor.execute(command);
+			if (result != 0) throw new StorageException ("Failed to copy storage, exit code " + result + ".");
+		}
+		catch (IOException e)
+		{
+			throw new StorageException("Failed to copy storage.", e); 
+		}
+	}
+	
 	@Override
 	public void copyToWorkspace(Iterable<String> address, Workspace workspace, Path source, Path destination) throws StorageException {
 		Path workspacePath = getWorkspacePath(address, workspace);
@@ -81,13 +103,7 @@ public class VanillaStorage implements Storage {
 		if (source == null) source = Paths.get("");
 		if (destination == null) destination = Paths.get("");
 		Path workspaceDestination = workspacePath.resolve(destination);
-
-		try {
-			if (Files.isDirectory(source)) FileUtils.copyDirectory(source.toFile(), workspaceDestination.toFile());
-			else FileUtils.copyFileToDirectory(source.toFile(), workspaceDestination.toFile());
-		} catch (IOException e) {
-			throw new StorageException("Failed to copy to workspace.", e);
-		}
+		copyPathToPath(source,workspaceDestination);
 	}
 	
 	@Override
@@ -97,13 +113,7 @@ public class VanillaStorage implements Storage {
 		if (source == null) source = Paths.get("");
 		if (destination == null) destination = Paths.get("");
 		Path workspaceSource = workspacePath.resolve(source);
-
-		try {
-			if (Files.isDirectory(workspaceSource)) FileUtils.copyDirectory(workspaceSource.toFile(), destination.toFile());
-			else FileUtils.copyFileToDirectory(workspaceSource.toFile(), destination.toFile());
-		} catch (IOException e) {
-			throw new StorageException("Failed to copy from workspace.", e);
-		}
+		copyPathToPath(workspaceSource,destination);
 	}
 	
 	/*****************************************************************************/

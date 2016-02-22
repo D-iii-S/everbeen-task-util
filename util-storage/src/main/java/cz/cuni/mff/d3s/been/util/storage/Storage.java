@@ -5,40 +5,24 @@ import java.nio.file.Path;
 public interface Storage {
 
 	enum Workspace { 
-		/**
-		 * Temporary workspace. Can be pruned when not used for some time.
-		 */
+		/** Temporary workspace. Can be pruned when not used for some time. */
 		TEMP, 
-		/**
-		 * Compressible workspace. Can be compressed when not used for some time. 
-		 */
+		/** Compressible workspace. Can be compressed when not used for some time. */
 		PACK, 
-		/**
-		 * Permanent workspace. Will not be touched in any automated manner. Honest :-) 
-		 */
+		/** Permanent workspace. Will not be touched in any automated manner. Honest :-) */
 		KEEP 	
 	};
 		
 	enum Status { 
-		/**
-		 * The storage address does not exist yet. 
-		 */
+		/** The storage address does not exist yet. */
 		NONE, 
-		/**
-		 * The storage address is used by an active task.
-		 */
+		/** The storage address is used by an active task. */
 		BUSY, 
-		/**
-		 * The storage address was used by a task that has failed.
-		 */
+		/** The storage address was used by a task that has failed. */
 		FAIL, 
-		/**
-		 * The storage address was used by a task that has finished successfully.
-		 */
+		/** The storage address was used by a task that has finished successfully. */
 		DONE, 
-		/**
-		 * The storage address was used by a task that has finished successfully and was pruned and compressed afterwards.  
-		 */
+		/** The storage address was used by a task that has finished successfully and was pruned and compressed afterwards. */
 		PACK 
 	};
 
