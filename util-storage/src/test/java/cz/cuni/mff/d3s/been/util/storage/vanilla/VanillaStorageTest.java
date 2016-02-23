@@ -46,4 +46,38 @@ public class VanillaStorageTest {
 		assertTrue (storage.compareAndSetStatus(address, Storage.Status.BUSY, Storage.Status.FAIL));
 		assertTrue (storage.getStatus(address) == Storage.Status.FAIL);
 	}
+	
+	@Test
+	public void testFileCopyToWorkspace() throws Exception {
+		Iterable<String> address = Arrays.asList("copy", "file");
+		Path source = Files.createTempFile("", "");
+		storage.copyToWorkspace(address, Storage.Workspace.KEEP, source, null);
+		Path workspace = storage.getWorkspacePath(address, Storage.Workspace.KEEP);
+		Path destination = workspace.resolve(source.getFileName());
+		assertTrue(Files.isRegularFile(destination));
+	}
+	
+	@Test
+	public void testDirectoryCopyToWorkspace() throws Exception {
+		Iterable<String> address = Arrays.asList("copy", "directory");
+		Path source = Files.createTempDirectory("");
+		storage.copyToWorkspace(address, Storage.Workspace.KEEP, source, source.getFileName());
+		Path workspace = storage.getWorkspacePath(address, Storage.Workspace.KEEP);
+		Path destination = workspace.resolve(source.getFileName());
+		assertTrue(Files.isDirectory(destination));
+	}
+
+	@Test
+	public void testRecursiveCopyToWorkspace() throws Exception {
+		Iterable<String> address = Arrays.asList("copy", "recursive");
+		Path source = Files.createTempDirectory("");
+		Path innerFile = Files.createTempFile(source,  "",  "");
+		Path innerDirectory = Files.createTempDirectory(source,  "");
+		storage.copyToWorkspace(address, Storage.Workspace.KEEP, source, null);
+		Path destination = storage.getWorkspacePath(address, Storage.Workspace.KEEP);
+		Path destinationFile = destination.resolve(innerFile.getFileName());
+		Path destinationDirectory = destination.resolve(innerDirectory.getFileName());
+		assertTrue(Files.isRegularFile(destinationFile));
+		assertTrue(Files.isDirectory(destinationDirectory));
+	}
 }

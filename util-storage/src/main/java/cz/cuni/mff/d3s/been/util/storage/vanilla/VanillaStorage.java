@@ -5,15 +5,17 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.LinkedList;
 import java.util.List;
-
-import org.apache.commons.exec.CommandLine;
-import org.apache.commons.exec.DefaultExecutor;
 
 import cz.cuni.mff.d3s.been.util.storage.Storage;
 import cz.cuni.mff.d3s.been.util.storage.StorageException;
@@ -45,7 +47,7 @@ public class VanillaStorage implements Storage {
 		for (String element : address) {
 			basePath = basePath.resolve(element);
 		}
-		return (basePath);
+		return basePath;
 	}
 
 	private Path getInternalPath(Iterable<String> address, String directory) throws StorageException {
@@ -59,7 +61,7 @@ public class VanillaStorage implements Storage {
 			throw new StorageException("Failed to create internal path.", e);
 		}
 
-		return (internalPath);
+		return internalPath;
 	}
 
 	@Override
@@ -75,24 +77,45 @@ public class VanillaStorage implements Storage {
 		return getInternalPath(address, directory);
 	}
 
-	private void copyPathToPath(Path source, Path destination) throws StorageException {
+	private void copyPathToPath(final Path source, final Path destination) throws StorageException {
 
 		// We do not use Commons IO because it does not preserve attributes.
-
-		DefaultExecutor executor = new DefaultExecutor ();
 		
-		CommandLine command = new CommandLine ("cp")
-			.addArgument("-a", false)
-			.addArgument(source.toString(), false)
-			.addArgument(destination.toString(), false);
+		// TODO What about links ?
 
-		try {
-			int result = executor.execute(command);
-			if (result != 0) throw new StorageException ("Failed to copy storage, exit code " + result + ".");
-		}
-		catch (IOException e)
-		{
-			throw new StorageException("Failed to copy storage.", e); 
+	    class CopyVisitor extends SimpleFileVisitor<Path> {
+	 
+	        @Override
+	        public FileVisitResult preVisitDirectory(Path sourceDirectory, BasicFileAttributes attributes) throws IOException {
+	        	Path destinationDirectory = destination.resolve(source.relativize(sourceDirectory)); 
+                Files.copy(sourceDirectory, destinationDirectory, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+	            return FileVisitResult.CONTINUE;
+	        }
+	 
+	        @Override
+	        public FileVisitResult visitFile(Path sourceFile, BasicFileAttributes attributes) throws IOException {
+	        	Path destinationFile = destination.resolve(source.relativize(sourceFile)); 
+	            Files.copy(sourceFile, destinationFile, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+	            return FileVisitResult.CONTINUE;
+	        }
+	 
+	        @Override
+	        public FileVisitResult postVisitDirectory(Path sourceDirectory, IOException e) throws IOException {
+	            if (e == null) {
+		        	Path destinationDirectory = destination.resolve(source.relativize(sourceDirectory)); 
+                    FileTime time = Files.getLastModifiedTime(sourceDirectory);
+	                Files.setLastModifiedTime(destinationDirectory, time);
+		            return FileVisitResult.CONTINUE;
+	            }
+	            throw e;
+	        }
+	    }
+
+	    try {
+		    if (Files.isDirectory(source)) Files.walkFileTree(source, new CopyVisitor ());
+		    else Files.copy(source, destination.resolve(source.getFileName()), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e)	{
+			throw new StorageException("Failed to copy.", e); 
 		}
 	}
 	
@@ -144,7 +167,7 @@ public class VanillaStorage implements Storage {
 			throw new StorageException("Failed to access status file.", e);
 		}
 		
-		return (statusChannel);
+		return statusChannel;
 	}
 	
 	private Status readStatusFromChannel(FileChannel statusChannel) throws StorageException {
@@ -164,7 +187,7 @@ public class VanillaStorage implements Storage {
 		if (statusText.isEmpty()) return (Status.NONE);
 		
 		try {
-			return (Status.valueOf(statusText));
+			return Status.valueOf(statusText);
 		} catch (IllegalArgumentException e) {
 			throw new StorageException("Invalid status file.", e);
 		}
@@ -175,7 +198,7 @@ public class VanillaStorage implements Storage {
 		try (FileChannel statusChannel = getLockedStatusChannel(address)) {
 			Status status = readStatusFromChannel(statusChannel);
 			
-			return (status);
+			return status;
 			
 		} catch (IOException e) {
 			throw new StorageException("Failed to close status file.", e);
@@ -199,7 +222,7 @@ public class VanillaStorage implements Storage {
 				throw new StorageException("Failed to update status file.", e);
 			}
 
-			return (true);
+			return true;
 	
 		} catch (IOException e) {
 			throw new StorageException("Failed to close status file.", e);
@@ -216,18 +239,18 @@ public class VanillaStorage implements Storage {
 		class ListFilter implements DirectoryStream.Filter<Path> {
 			@Override
 			public boolean accept(Path entry) throws IOException {
-				return (!Files.isHidden(entry));
+				return !Files.isHidden(entry);
 			}
 		}
 		
 		try (DirectoryStream<Path> directory = Files.newDirectoryStream(basePath, new ListFilter ()))	{
 			for (Path item : directory) {
-				list.add(item.toString());
+				list.add(item.getFileName().toString());
 			}
 		} catch (IOException e) {
 			throw new StorageException ("Failed to list storage.", e);
 		}
 		
-		return (list);
+		return list;
 	}
 }
