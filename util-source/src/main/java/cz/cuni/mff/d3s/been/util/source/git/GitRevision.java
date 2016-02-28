@@ -1,15 +1,15 @@
-package cz.cuni.mff.d3s.been.util.source.mercurial;
+package cz.cuni.mff.d3s.been.util.source.git;
 
 import java.time.Instant;
 
 import cz.cuni.mff.d3s.been.util.source.Revision;
 
-class MercurialRevision extends Revision {
+class GitRevision extends Revision {
 
-	protected MercurialRepository repository;
+	protected GitRepository repository;
 	protected String hash;
 	
-	MercurialRevision (MercurialRepository argRepository, String argHash, Instant argDate) {
+	GitRevision (GitRepository argRepository, String argHash, Instant argDate) {
 		super (argDate);
 		repository = argRepository;
 		hash = argHash;
@@ -32,7 +32,7 @@ class MercurialRevision extends Revision {
 		// Really comparing two revisions.
 		// Equality means same repository and same hash,
 		// even though same hash alone would probably suffice.
-		MercurialRevision other = (MercurialRevision) obj;
+		GitRevision other = (GitRevision) obj;
 		return hash.equals(other.hash) && repository.equals (other.repository);
 	}
 }

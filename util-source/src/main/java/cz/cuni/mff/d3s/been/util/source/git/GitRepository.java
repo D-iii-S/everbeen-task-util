@@ -1,10 +1,9 @@
-package cz.cuni.mff.d3s.been.util.source.mercurial;
+package cz.cuni.mff.d3s.been.util.source.git;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedList;
@@ -25,24 +24,22 @@ import cz.cuni.mff.d3s.been.util.source.SourceControlException;
  * @author ceres
  *
  */
-public class MercurialRepository implements Repository {
+public class GitRepository implements Repository {
 
 	protected String remoteAddress;
 	protected Path localAbsolutePath;
 
-	private static final Logger log = LoggerFactory.getLogger(MercurialRepository.class);
+	private static final Logger log = LoggerFactory.getLogger(GitRepository.class);
 	
-	private DateTimeFormatter stampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xx").withZone(ZoneOffset.UTC);
-	
-	public MercurialRepository(String argRemoteAddress, Path argLocalPath) throws SourceControlException {
+	public GitRepository(String argRemoteAddress, Path argLocalPath) throws SourceControlException {
 		
 		remoteAddress = argRemoteAddress;
 		
 		// Local path is kept as absolute because current directory may change throughout execution.
 		localAbsolutePath = argLocalPath.toAbsolutePath();
 		
-		// If the local path does not exist initialize an empty repository inside.
-		if (!hgExists()) hgInitialize();
+		// If the local path does not exist initialize a repository mirror inside.
+		if (!gitExists()) gitInitialize();
 	}
 
 	/*****************************************************************************/
@@ -63,7 +60,7 @@ public class MercurialRepository implements Repository {
 		
 		// Really comparing two repositories.
 		// Equality means same remote path.
-		MercurialRepository other = (MercurialRepository) obj;
+		GitRepository other = (GitRepository) obj;
 		return remoteAddress.equals(other.remoteAddress);
 	}
 	
@@ -74,9 +71,11 @@ public class MercurialRepository implements Repository {
 	 * 
 	 * @return True when the repository exists.
 	 */
-	private boolean hgExists () {
-		Path repo = localAbsolutePath.resolve(".hg");
-		boolean exists = Files.isDirectory(repo);
+	private boolean gitExists () {
+		Path repoHead = localAbsolutePath.resolve("HEAD");
+		Path repoRefs = localAbsolutePath.resolve("refs");
+		Path repoObjects = localAbsolutePath.resolve("objects");
+		boolean exists = Files.isReadable(repoHead) && Files.isDirectory(repoRefs) && Files.isDirectory(repoObjects);
 		return exists;
 	}
 	
@@ -85,12 +84,14 @@ public class MercurialRepository implements Repository {
 	 * 
 	 * @throws SourceControlException
 	 */
-	private void hgInitialize () throws SourceControlException {
+	private void gitInitialize () throws SourceControlException {
 		DefaultExecutor executor = new DefaultExecutor ();
 		executor.setWorkingDirectory(localAbsolutePath.toFile());
 		
-		CommandLine command = new CommandLine ("hg")
-			.addArgument("init", false)
+		CommandLine command = new CommandLine ("git")
+			.addArgument("clone", false)
+			.addArgument("--mirror", false)
+			.addArgument(remoteAddress, false)
 			.addArgument(localAbsolutePath.toString(), false);
 
 		try {
@@ -106,12 +107,13 @@ public class MercurialRepository implements Repository {
 	/**
 	 * Lists revisions from repository.
 	 * 
-	 * @param date Date filter specification or null for no filter.
+	 * @param since Oldest date or null for no limit.
+	 * @param until Newest date or null for no limit.
 	 * @param limit Revision count limit or null for no limit.
 	 * @return List of revisions.
 	 * @throws SourceControlException
 	 */
-	public List<Revision> hgLog(String date, String limit) throws SourceControlException {
+	public List<Revision> gitLog(String since, String until, String limit) throws SourceControlException {
 		final List<Revision> list = new LinkedList<Revision> ();
 		
 		class LogParser extends LogOutputStream {
@@ -120,8 +122,8 @@ public class MercurialRepository implements Repository {
 				String [] record = line.split ("\\t");
 				try {
 					String hash = record [0];
-					Instant date = Instant.from(stampFormatter.parse(record [1]));
-					list.add(new MercurialRevision(MercurialRepository.this, hash, date));
+					Instant date = Instant.from(DateTimeFormatter.ISO_DATE_TIME.parse(record [1]));
+					list.add(new GitRevision(GitRepository.this, hash, date));
 				}
 				catch (ArrayIndexOutOfBoundsException | DateTimeParseException e) {
 					log.info("Failed to parse log entry: {}.", line);
@@ -135,13 +137,14 @@ public class MercurialRepository implements Repository {
 		PumpStreamHandler pumper = new PumpStreamHandler(new LogParser());
 		executor.setStreamHandler(pumper);
 		
-		CommandLine command = new CommandLine ("hg")
-			.addArgument("log", false)
-			.addArgument("--template", false) 
-			.addArgument("{node}\\t{date|isodatesec}\\n", false);
+		CommandLine command = new CommandLine ("git")
+			.addArgument("rev-list", false)
+			.addArgument("HEAD", false)
+			.addArgument("--format=format:%H\\t%cI", false); 
 		
-		if (date != null) command.addArgument("--date", false).addArgument(date, false);
-		if (limit != null) command.addArgument("--limit", false).addArgument(limit, false);
+		if (since != null) command.addArgument("--since" + "=" + since, false);
+		if (until != null) command.addArgument("--until" + "=" + until, false);
+		if (limit != null) command.addArgument("--max-count" + "=" + limit, false);
 		
 		try {
 			int result = executor.execute(command);			
@@ -156,29 +159,42 @@ public class MercurialRepository implements Repository {
 	}
 	
 	/**
-	 * Exports revision from repository.
+	 * Checks out revision from repository.
+	 * <p>
+	 * There seems to be no simple way of getting a working directory for a commit without getting a repository history too.
+	 * We therefore create a shared repository clone and check out the particular commit. 
 	 * 
 	 * @param revision Revision to export.
 	 * @param exportPath Directory to export to.
 	 * @throws SourceControlException
 	 */
-	private void hgArchive(String revision, Path exportPath) throws SourceControlException {
-		DefaultExecutor executor = new DefaultExecutor ();
-		executor.setWorkingDirectory(localAbsolutePath.toFile());
+	private void gitClone(String revision, Path exportPath) throws SourceControlException {
 		
-		CommandLine command = new CommandLine ("hg")
-			.addArgument("archive", false)
-			.addArgument("--rev", false).addArgument(revision, false)
-			.addArgument("--type", false).addArgument("files", false)
+		DefaultExecutor executor = new DefaultExecutor ();
+		
+		CommandLine cloneCommand = new CommandLine ("git")
+			.addArgument("clone", false)
+			.addArgument("--shared", false)
+			.addArgument("--no-checkout", false)
+			.addArgument(localAbsolutePath.toString(), false)
 			.addArgument(exportPath.toAbsolutePath().toString(), false);
 		
+		CommandLine checkoutCommand = new CommandLine ("git")
+				.addArgument("checkout", false)
+				.addArgument(revision, false);
+			
 		try {
-			int result = executor.execute(command);
-			if (result != 0) throw new SourceControlException ("Failed to archive the repository, exit code " + result + ".");
+			executor.setWorkingDirectory(localAbsolutePath.toFile());
+			int cloneResult = executor.execute(cloneCommand);
+			if (cloneResult != 0) throw new SourceControlException ("Failed to clone the repository, exit code " + cloneResult + ".");
+			
+			executor.setWorkingDirectory(exportPath.toFile());
+			int checkoutResult = executor.execute(checkoutCommand);
+			if (checkoutResult != 0) throw new SourceControlException ("Failed to checkout the repository, exit code " + checkoutResult + ".");
 		}
 		catch (IOException e)
 		{
-			throw new SourceControlException("Failed to archive the repository.", e); 
+			throw new SourceControlException("Failed to clone or checkout the repository.", e); 
 		}
 	}
 	
@@ -189,9 +205,8 @@ public class MercurialRepository implements Repository {
 		DefaultExecutor executor = new DefaultExecutor ();
 		executor.setWorkingDirectory(localAbsolutePath.toFile());
 		
-		CommandLine command = new CommandLine ("hg")
-			.addArgument("pull", false)
-			.addArgument(remoteAddress, false);
+		CommandLine command = new CommandLine ("git")
+			.addArgument("fetch", false);
 		
 		try {
 			int result = executor.execute(command);			
@@ -205,24 +220,24 @@ public class MercurialRepository implements Repository {
 
 	@Override
 	public List<Revision> list(Instant from) throws SourceControlException {
-		return hgLog(">" + stampFormatter.format(from), null);
+		return gitLog(from.toString(), null, null);
 	}
 
 	@Override
 	public void checkout(Instant instant, Path directory) throws SourceControlException {
-		List<Revision> candidateRevisions = hgLog("<" + stampFormatter.format(instant), "1");
+		List<Revision> candidateRevisions = gitLog(null, instant.toString(), "1");
 		if (candidateRevisions.isEmpty()) throw new SourceControlException("Attempting to checkout a revision that does not exist.");
-		MercurialRevision nativeRevision = (MercurialRevision) candidateRevisions.get(0);
+		GitRevision nativeRevision = (GitRevision) candidateRevisions.get(0);
 		String hashRevision = nativeRevision.hash;
-		hgArchive(hashRevision, directory);
+		gitClone(hashRevision, directory);
 	}
 		
 	@Override
 	public void checkout(Revision revision, Path directory) throws SourceControlException {
-		MercurialRevision nativeRevision = (MercurialRevision) revision;
+		GitRevision nativeRevision = (GitRevision) revision;
 		if (nativeRevision == null) throw new SourceControlException ("Attempting to checkout revision from a different version control system.");
 		if (!nativeRevision.repository.equals(this)) throw new SourceControlException ("Attempting to checkout revision from a different repository.");
 		String hashRevision = nativeRevision.hash;
-		hgArchive(hashRevision, directory);
+		gitClone(hashRevision, directory);
 	}
 }
