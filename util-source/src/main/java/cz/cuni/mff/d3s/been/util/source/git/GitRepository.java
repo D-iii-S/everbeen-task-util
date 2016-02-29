@@ -138,9 +138,9 @@ public class GitRepository implements Repository {
 		executor.setStreamHandler(pumper);
 		
 		CommandLine command = new CommandLine ("git")
-			.addArgument("rev-list", false)
+			.addArgument("log", false)
 			.addArgument("HEAD", false)
-			.addArgument("--format=format:%H\\t%cI", false); 
+			.addArgument("--format=%H\t%cI", false); 
 		
 		if (since != null) command.addArgument("--since" + "=" + since, false);
 		if (until != null) command.addArgument("--until" + "=" + until, false);

@@ -158,27 +158,27 @@ public class MercurialRepository implements Repository {
 	/**
 	 * Exports revision from repository.
 	 * 
-	 * @param revision Revision to export.
-	 * @param exportPath Directory to export to.
+	 * @param revision Revision to clone.
+	 * @param exportPath Directory to clone to.
 	 * @throws SourceControlException
 	 */
-	private void hgArchive(String revision, Path exportPath) throws SourceControlException {
+	private void hgClone(String revision, Path exportPath) throws SourceControlException {
 		DefaultExecutor executor = new DefaultExecutor ();
 		executor.setWorkingDirectory(localAbsolutePath.toFile());
 		
 		CommandLine command = new CommandLine ("hg")
-			.addArgument("archive", false)
+			.addArgument("clone", false)
 			.addArgument("--rev", false).addArgument(revision, false)
-			.addArgument("--type", false).addArgument("files", false)
+			.addArgument(localAbsolutePath.toString(), false)
 			.addArgument(exportPath.toAbsolutePath().toString(), false);
 		
 		try {
 			int result = executor.execute(command);
-			if (result != 0) throw new SourceControlException ("Failed to archive the repository, exit code " + result + ".");
+			if (result != 0) throw new SourceControlException ("Failed to clone the repository, exit code " + result + ".");
 		}
 		catch (IOException e)
 		{
-			throw new SourceControlException("Failed to archive the repository.", e); 
+			throw new SourceControlException("Failed to clone the repository.", e); 
 		}
 	}
 	
@@ -214,7 +214,7 @@ public class MercurialRepository implements Repository {
 		if (candidateRevisions.isEmpty()) throw new SourceControlException("Attempting to checkout a revision that does not exist.");
 		MercurialRevision nativeRevision = (MercurialRevision) candidateRevisions.get(0);
 		String hashRevision = nativeRevision.hash;
-		hgArchive(hashRevision, directory);
+		hgClone(hashRevision, directory);
 	}
 		
 	@Override
@@ -223,6 +223,6 @@ public class MercurialRepository implements Repository {
 		if (nativeRevision == null) throw new SourceControlException ("Attempting to checkout revision from a different version control system.");
 		if (!nativeRevision.repository.equals(this)) throw new SourceControlException ("Attempting to checkout revision from a different repository.");
 		String hashRevision = nativeRevision.hash;
-		hgArchive(hashRevision, directory);
+		hgClone(hashRevision, directory);
 	}
 }
