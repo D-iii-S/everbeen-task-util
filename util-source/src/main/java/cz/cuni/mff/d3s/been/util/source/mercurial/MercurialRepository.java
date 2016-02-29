@@ -32,7 +32,7 @@ public class MercurialRepository implements Repository {
 
 	private static final Logger log = LoggerFactory.getLogger(MercurialRepository.class);
 	
-	private DateTimeFormatter stampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xx").withZone(ZoneOffset.UTC);
+	private DateTimeFormatter stampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xx");
 	
 	public MercurialRepository(String argRemoteAddress, Path argLocalPath) throws SourceControlException {
 		
@@ -205,12 +205,12 @@ public class MercurialRepository implements Repository {
 
 	@Override
 	public List<Revision> list(Instant from) throws SourceControlException {
-		return hgLog(">" + stampFormatter.format(from), null);
+		return hgLog(">" + stampFormatter.format(from.atOffset(ZoneOffset.UTC)), null);
 	}
 
 	@Override
 	public void checkout(Instant instant, Path directory) throws SourceControlException {
-		List<Revision> candidateRevisions = hgLog("<" + stampFormatter.format(instant), "1");
+		List<Revision> candidateRevisions = hgLog("<" + stampFormatter.format(instant.atOffset(ZoneOffset.UTC)), "1");
 		if (candidateRevisions.isEmpty()) throw new SourceControlException("Attempting to checkout a revision that does not exist.");
 		MercurialRevision nativeRevision = (MercurialRevision) candidateRevisions.get(0);
 		String hashRevision = nativeRevision.hash;

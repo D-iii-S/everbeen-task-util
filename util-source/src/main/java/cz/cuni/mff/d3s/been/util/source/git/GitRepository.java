@@ -85,10 +85,10 @@ public class GitRepository implements Repository {
 	 * @throws SourceControlException
 	 */
 	private void gitInitialize () throws SourceControlException {
-		DefaultExecutor executor = new DefaultExecutor ();
+		DefaultExecutor executor = new DefaultExecutor();
 		executor.setWorkingDirectory(localAbsolutePath.toFile());
 		
-		CommandLine command = new CommandLine ("git")
+		CommandLine command = new CommandLine("git")
 			.addArgument("clone", false)
 			.addArgument("--mirror", false)
 			.addArgument(remoteAddress, false)
@@ -96,7 +96,7 @@ public class GitRepository implements Repository {
 
 		try {
 			int result = executor.execute(command);
-			if (result != 0) throw new SourceControlException ("Failed to initialize the repository, exit code " + result + ".");
+			if (result != 0) throw new SourceControlException("Failed to initialize the repository, exit code " + result + ".");
 		}
 		catch (IOException e)
 		{
@@ -114,7 +114,7 @@ public class GitRepository implements Repository {
 	 * @throws SourceControlException
 	 */
 	public List<Revision> gitLog(String since, String until, String limit) throws SourceControlException {
-		final List<Revision> list = new LinkedList<Revision> ();
+		final List<Revision> list = new LinkedList<Revision>();
 		
 		class LogParser extends LogOutputStream {
 			@Override
@@ -137,7 +137,7 @@ public class GitRepository implements Repository {
 		PumpStreamHandler pumper = new PumpStreamHandler(new LogParser());
 		executor.setStreamHandler(pumper);
 		
-		CommandLine command = new CommandLine ("git")
+		CommandLine command = new CommandLine("git")
 			.addArgument("log", false)
 			.addArgument("HEAD", false)
 			.addArgument("--format=%H\t%cI", false); 
@@ -148,7 +148,7 @@ public class GitRepository implements Repository {
 		
 		try {
 			int result = executor.execute(command);			
-			if (result != 0) throw new SourceControlException ("Failed to query the repository log, exit code " + result + ".");
+			if (result != 0) throw new SourceControlException("Failed to query the repository log, exit code " + result + ".");
 		}
 		catch (IOException e)
 		{
@@ -170,27 +170,27 @@ public class GitRepository implements Repository {
 	 */
 	private void gitClone(String revision, Path exportPath) throws SourceControlException {
 		
-		DefaultExecutor executor = new DefaultExecutor ();
+		DefaultExecutor executor = new DefaultExecutor();
 		
-		CommandLine cloneCommand = new CommandLine ("git")
+		CommandLine cloneCommand = new CommandLine("git")
 			.addArgument("clone", false)
 			.addArgument("--shared", false)
 			.addArgument("--no-checkout", false)
 			.addArgument(localAbsolutePath.toString(), false)
 			.addArgument(exportPath.toAbsolutePath().toString(), false);
 		
-		CommandLine checkoutCommand = new CommandLine ("git")
+		CommandLine checkoutCommand = new CommandLine("git")
 				.addArgument("checkout", false)
 				.addArgument(revision, false);
 			
 		try {
 			executor.setWorkingDirectory(localAbsolutePath.toFile());
 			int cloneResult = executor.execute(cloneCommand);
-			if (cloneResult != 0) throw new SourceControlException ("Failed to clone the repository, exit code " + cloneResult + ".");
+			if (cloneResult != 0) throw new SourceControlException("Failed to clone the repository, exit code " + cloneResult + ".");
 			
 			executor.setWorkingDirectory(exportPath.toFile());
 			int checkoutResult = executor.execute(checkoutCommand);
-			if (checkoutResult != 0) throw new SourceControlException ("Failed to checkout the repository, exit code " + checkoutResult + ".");
+			if (checkoutResult != 0) throw new SourceControlException("Failed to checkout the repository, exit code " + checkoutResult + ".");
 		}
 		catch (IOException e)
 		{
@@ -202,15 +202,15 @@ public class GitRepository implements Repository {
 	
 	@Override
 	public void pull() throws SourceControlException {
-		DefaultExecutor executor = new DefaultExecutor ();
+		DefaultExecutor executor = new DefaultExecutor();
 		executor.setWorkingDirectory(localAbsolutePath.toFile());
 		
-		CommandLine command = new CommandLine ("git")
+		CommandLine command = new CommandLine("git")
 			.addArgument("fetch", false);
 		
 		try {
 			int result = executor.execute(command);			
-			if (result != 0) throw new SourceControlException ("Failed to pull the repository, exit code " + result + ".");
+			if (result != 0) throw new SourceControlException("Failed to pull the repository, exit code " + result + ".");
 		}
 		catch (IOException e)
 		{
